@@ -1,0 +1,144 @@
+#!/usr/bin/env python
+# coding: utf-8
+"""
+
+openstack command wrapper in some older version openstack.
+
+author: zhang, junhui
+date: 2016.09.21
+
+"""
+
+import os
+import json
+import argparse
+
+
+def parse_opt():
+    parser = argparse.ArgumentParser(description="openstack cmd.")
+    parser.add_argument('component', help="component")
+    parser.add_argument('sub_cmd', help="sub_cmd")
+    parser.add_argument('-f', '--format', dest="format",
+                        help="output format")
+    parser.add_argument('--long', dest="long", action='store_true',
+                        help="not useful")
+    args = parser.parse_args()
+    return args
+
+
+def command(cmd):
+    def _command():
+        return os.popen(cmd).read()
+    return _command
+
+
+def get_region():
+    ret = """+-----------+---------------+-------------+
+| Region    | Parent Region | Description |
++-----------+---------------+-------------+
+| %s | None          |             |
++-----------+---------------+-------------+""" % \
+           os.popen("echo $OS_REGION_NAME").read().strip()
+    return ret
+    return to_json(ret)
+
+
+def parse_cmd(cmd):
+    output = os.popen(cmd).read().strip()
+    return parse_output(output)
+
+
+def endpoint_list():
+    services = parse_cmd("keystone service-list")
+    endpoints = parse_cmd("keystone endpoint-list")
+    service_dict = {x["Id"]: x for x in services}
+    data = []
+    for endpoint in endpoints:
+        service_id = endpoint["Service_id"]
+        other = {
+                 "ID": endpoint["Id"],
+                 "Service Name": service_dict[service_id]["Name"],
+                 "Service Type": service_dict[service_id]["Type"],
+                 "Enabled": True,
+                 "Region": endpoint["Region"],
+                 }
+        public = other.copy()
+        admin = other.copy()
+        internal = other.copy()
+        public["Interface"] = "public"
+        admin["Interface"] = "admin"
+        internal["Interface"] = "internal"
+        public["URL"] = endpoint["Publicurl"]
+        admin["URL"] = endpoint["Adminurl"]
+        internal["URL"] = endpoint["Internalurl"]
+        data.extend((public, admin, internal))
+    keys = ["ID", "Region", "Service Name", "Service Type", "Enabled",
+            "Interface", "URL"]
+    ret = ['+-+', '|%s|' % "|".join(keys), '+-+']
+    for endpoint in data:
+        ret.append('|%s|' % "|".join([str(endpoint[k]) for k in keys]))
+    ret.append("+-+")
+    return os.linesep.join(ret)
+
+
+
+
+
+CMD_dict = {
+    "region": {
+        "list": get_region
+    },
+    # "service": {
+    #     "list": command("keystone service-list")
+    # },
+    "endpoint": {
+        "list": endpoint_list
+    },
+}
+
+
+def parse_output(text):
+    lines = text.splitlines()
+    head = lines[1]
+    bodies = lines[3:-1]
+    keys = [x.strip() for x in head.split("|")[1:-1]]
+    keys = [x[0].upper() + x[1:] for x in keys]
+    ret = []
+    for line in bodies:
+        values = [x.strip() for x in line.split("|")[1:-1]]
+        assert len(keys) == len(values)
+        d = {}
+        for i in range(len(keys)):
+            value = None if values[i] == "None" else\
+                    True if values[i] == "True" else\
+                    False if values[i] == "False" else values[i]
+            d[keys[i]] = value
+        ret.append(d)
+    return ret
+
+
+def to_json(text):
+    return json.dumps(parse_output(text))
+
+
+def exec_cmd(args):
+    if args.component in CMD_dict and args.sub_cmd in CMD_dict[args.component]:
+        return CMD_dict[args.component][args.sub_cmd]()
+    else:
+        cmd = translate_cmd(args)
+        return os.popen(cmd).read().strip()
+
+
+def translate_cmd(args):
+    return "keystone %s-%s " % (args.component, args.sub_cmd)
+
+
+def main():
+    args = parse_opt()
+    output = exec_cmd(args)
+    if args.format == "json":
+        output = to_json(output)
+    print output
+
+if __name__ == "__main__":
+    main()

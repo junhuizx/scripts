@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding: utf-8
 """
 
 Use this script to configuring multi-region openstack.
@@ -48,24 +49,26 @@ def system(cmd):
 def ssh_cmd(cmd, host=None):
     """generate a ssh command.
        cmd is a command str be execed in remote host
-       host: two types: tuple:  (username, ip)
+       host: two types: tuple:  (username, ip
                         string: username@ip
     """
     user, host = host if isinstance(host, (list, tuple)) else (None, host)
     host = "%s@%s" % (user, host) if host and user else host
     ssh = 'ssh "%s" ' % host if host else ""
-    ret = '%s "%s"' % (ssh, cmd) if ssh else cmd
+    ret = "%s '%s'" % (ssh, cmd.replace("'", r"'\''")) if ssh else cmd
     return ret
 
 
 def restart_all_openstack_service(host=None):
-    # list_cmd = "systemctl -a | grep -E 'openstack|httpd|neutron'"
-    # system_services = os.popen(ssh_cmd(list_cmd, host)).read().splitlines()
-    # system_services = [x.split()[0] for x in system_services]
-    # for service in system_services:
-    #     system(ssh_cmd("systemctl restart %s" % service))
-    for service in ["httpd.service", "openstack*service", "neutron*service"]:
-        system(ssh_cmd("systemctl restart %s" % service))
+    print "restart all openstack service:", host
+    list_cmd = "systemctl -a | grep -E 'openstack|httpd|neutron'"
+    system_services = os.popen(ssh_cmd(list_cmd, host)).read().splitlines()
+    system_services = [x.split()[1] if x.split()[0] == "●" else x.split()[0]
+                       for x in system_services]
+    for service in system_services:
+        system(ssh_cmd("systemctl restart %s" % service, host))
+    # for service in ["httpd.service", "openstack*service", "neutron*service"]:
+    #     system(ssh_cmd("systemctl restart %s" % service, host))
 
 
 def parse_opt():
@@ -73,38 +76,9 @@ def parse_opt():
     parser = argparse.ArgumentParser(description="Setup multi-regions.")
     parser.add_argument('-f', '--config-file', dest="config_file",
                         help="config file")
-    # parser.add_argument("-i", "--ip", dest="ip",
-    #                     default=get_default_ip(),
-    #                     help="host ip")
-    # parser.add_argument("-a", "--answer-file", dest="answer_file",
-    #                     default="answer-file.txt",
-    #                     help="answer file of local host.")
-    # parser.add_argument("-r", "--remote", dest="remote",
-    #                     required=True,
-    #                     help="the other region's controller, "
-    #                          "use user@ip format")
-    # parser.add_argument("-e", "--remote-answer-file", dest="remote_answer_file",
-    #                     default="answer-file.txt",
-    #                     help="answer file of remote host.")
-    # parser.add_argument("-k", "--keystone-rc", dest="keystone_rc",
-    #                     default="source keystonerc_admin",
-    #                     help="source keystonerc_admin command, if in the " +
-    #                          'devstack enviroment, use "source openrc admin"')
     parser.add_argument("-d", "--dry-run", dest="dry_run",
                         action="store_true",
                         help="answer file of remote host.")
-    # parser.add_argument("--dashboard-path", dest="dashboard_path",
-    #                     default=DASHBOARD_PATH,
-    #                     help="dashboard path of your horizon")
-    # parser.add_argument("-l", "--local-region-hosts", dest="local_region_hosts",
-    #                     action="append", default=[],
-    #                     help="local region hosts: other hosts need change "
-    #                          "region settings, if have use -l [ip] -l [ip]")
-    # parser.add_argument("-m", "--remote-region-hosts",
-    #                     dest="remote_region_hosts",
-    #                     action="append", default=[],
-    #                     help="remote region hosts: other hosts need change "
-    #                          "region settings, if have use -m [ip] -m [ip]")
     args = parser.parse_args()
     if args.config_file:
         conf.read(args.config_file)
@@ -154,12 +128,12 @@ def add_wraper(add_type, name):
         @functools.wraps(func)
         def add_(keystone_ip, add_types, *args, **kwargs):
             print("Add %s ..." % add_type)
-            keystone_host = "root@" + keystone_ip
+            #keystone_host = "root@" + keystone_ip
             names = [name] if isinstance(name, basestring) else name
             get_list_func = globals()["get_%s_list" %
                                       add_type.replace(" ", "_")]
             existences = [[x[y] for y in names] for x in
-                          get_list_func(keystone_host)]
+                          get_list_func()]
             for each in add_types:
                 if [each[y] for y in names] in existences:
                     continue
@@ -192,9 +166,10 @@ def add_services(service):
     cmd = "%s && openstack service create %s %s %s %s" % \
           (KEYSTONE_RC_CMD, service[u'Type'],
            "--name %s" % service[u'Name'] if service[u'Name'] else "",
-           "--description %s" % service[u'Description']
+           "--description '%s'" % service[u'Description']
            if service[u'Description'] else "",
-           "--enable" if service[u"Enabled"] else "--disable"
+           "--enable" if u"Enabled" not in service or service[u"Enabled"]
+           else "--disable"
            )
     return cmd
 
@@ -224,11 +199,26 @@ def modify_session_engine(conf):
     controller_hosts = [x.strip() for x in controller_hosts.split(",")] if \
         controller_hosts else [conf.get("global",
                                         "controller_virtual_ip").strip()]
+    memcache = conf.get("global", "memcache").strip()
+    mysql = conf.get("global", "mysql").strip().split(":")
+    mysql = mysql if mysql else [""]
+    mysql_ip, mysql_port = mysql[:2] if len(mysql) >= 2 \
+        else (mysql[0], "")
+    user, passwd = "session", "session"
+    if not memcache:
+        mysql_host = mysql_ip if mysql_ip else None
+        system(ssh_cmd("mysql -u root -e 'create database session;'",
+                       mysql_host))
+        system(ssh_cmd("mysql -u root -e 'CREATE USER \"%s\"@\"%%\""
+                       " IDENTIFIED BY \"%s\";'" % (user, passwd),
+                       mysql_host))
+        system(ssh_cmd("mysql -u root -e 'GRANT ALL ON session.* TO "
+                       "\"%s\"@\"%%\";'" % user, mysql_host))
+    first = True
     for ip in controller_hosts:
         host = None if is_local(ip) else "root@" + ip
         if os.system(ssh_cmd("grep SESSION_ENGINE '%s'" % settings_file,
                              host)) != 0:
-            memcache = conf.get("global", "memcache").strip()
             if memcache:
                 context = """
 SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
@@ -240,32 +230,29 @@ CACHES = {
 }
 """ % memcache
             else:
-                password = os.popen(ssh_cmd('cat ~/.my.cnf | grep password',
-                                            host)).\
-                    read().splitlines()[0].split("=")[1].replace("'", '')
                 context = """
 SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'session',
-        'USER': 'root',
+        'USER': '%s',
         'PASSWORD': '%s',
-        'HOST': '',
-        'PORT': '3306',
+        'HOST': '%s',
+        'PORT': '%s',
     }
 }
-""" % password
+""" % (user, passwd, mysql_ip, mysql_port)
             if host:
-                system('ssh root@%s "cat >> %s " <<EOF \n%sEOF' %
+                system('ssh %s "cat >> %s " <<EOF \n%sEOF' %
                        (host, settings_file, context))
             else:
                 system('cat >> %s <<EOF \n%sEOF' % (settings_file, context))
-            if not memcache:
-                system(ssh_cmd("mysql -uroot -e 'create database session;'",
+            if first and not memcache:
+                print "migrate"
+                system(ssh_cmd("python %s/manage.py migrate" % dashboard_path,
                                host))
-                system(ssh_cmd("python %s/manage.py migrate" %
-                               dashboard_path, host))
+                first = False
             system(ssh_cmd("service httpd restart", host))
 
 
@@ -273,6 +260,7 @@ def replace_all(path, src, dst, host=None):
     src = src.replace("/", r"\/")
     dst = dst.replace("/", r"\/")
     cmd = "find %s -type f | xargs -n1 sed -i 's/%s/%s/g'" % (path, src, dst)
+    print "Before ssh_cmd:", cmd
     return system(ssh_cmd(cmd, host))
 
 
@@ -286,11 +274,14 @@ def add_config_if_have_not_added(path, pattern, not_add_pattern,
     context = reduce(lambda x, y: "%si \%s\n" % (x, y), config_lines, "")
     cmd = "find %s -type f | xargs -n1 sed -i  '/%s/{n;/%s/'\!'{%s}}'" %\
           (path, pattern, not_add_pattern, context)
+    print "Before ssh_cmd:", cmd
     return system(ssh_cmd(cmd, host))
 
 
-def modify_keystone_address(host, keystone_ip, vip=None, hosts=None):
+def modify_keystone_address(host, keystone_ip, vip=None, hosts=None,
+                            remote_compute_hosts=[]):
     print('modify keystone address: %s' % host)
+    # get all endpoints in the other region
     endpoint_info = [(x[u"Service Name"], x[u'URL']) for x
                      in get_endpoint_list(host)]
     remote_keystone_ip = None
@@ -312,39 +303,60 @@ def modify_keystone_address(host, keystone_ip, vip=None, hosts=None):
         if ip == "127.0.0.1" or remote_keystone_ip == keystone_ip:
             continue
         print ip
+        host = ("root", ip)
         replace_all("/etc/", remote_keystone_ip + ":5000",
-                    keystone_ip + ":5000", ("root", ip))
+                    keystone_ip + ":5000", host)
         replace_all("./keystonerc_admin", remote_keystone_ip + ":5000",
-                    keystone_ip + ":5000", ("root", ip))
+                    keystone_ip + ":5000", host)
         replace_all("/etc/", remote_keystone_ip + ":35357",
-                    keystone_ip + ":35357", ("root", ip))
+                    keystone_ip + ":35357", host)
         add_config_if_have_not_added("/etc/cinder/cinder.conf",
                                      "#encryption_auth_url",
                                      "encryption_auth_url",
                                      ["encryption_auth_url = http://%s:5000/v3"
                                       % keystone_ip,
                                       "# add by setup_regions.py"],
-                                     ("root", ip))
+                                     host)
         replace_all("/etc/cinder/cinder.conf",
                     "backup_swift_auth_url *= *http://127.0.0.1:5000/v2.0/",
                     "backup_swift_auth_url = http://%s:5000/v3/" % keystone_ip,
-                    ("root", ip))
-        restart_all_openstack_service(("root", ip))
+                    host)
+        #restart_all_openstack_service(host)
+    for host in remote_compute_hosts:
+        host = ("root", host)
+        replace_all("/etc/", remote_keystone_ip + ":5000",
+                    keystone_ip + ":5000", host)
+        replace_all("/etc/", remote_keystone_ip + ":35357",
+                    keystone_ip + ":35357", host)
 
 
 def modify_all_keystone_address(conf):
     print('modify all keystone address...')
     keystone_ip = conf.get("global", "keystone_ip").strip()
-    remote_keystone_ip = conf.get("global", "remote_keystone_ip").strip()
-    remote_keystone_host = "root@" + remote_keystone_ip
-    vip = conf.get('global', 'remote_controller_virtual_ip')
+    #remote_keystone_ip = conf.get("global", "remote_keystone_ip").strip()
+    #remote_keystone_host = "root@" + remote_keystone_ip
+    vip = conf.get('global', 'controller_virtual_ip')
+    controller_hosts = conf.get("global", "remote_controller_hosts").strip()
+    controller_hosts = [x.strip() for x in controller_hosts.split(",")] \
+        if controller_hosts else [vip]
+    rvip = conf.get('global', 'remote_controller_virtual_ip')
     remote_controller_hosts = conf.get("global", "remote_controller_hosts"
                                        ).strip()
     remote_controller_hosts = [x.strip() for x in
                                remote_controller_hosts.split(",")]\
-        if remote_controller_hosts else [vip]
-    modify_keystone_address(remote_keystone_host, keystone_ip,
-                            vip, remote_controller_hosts)
+        if remote_controller_hosts else [rvip]
+    remote_compute_hosts = conf.get("global", "remote_compute_hosts").strip()
+    remote_compute_hosts = remote_compute_hosts.split(",") if \
+        remote_compute_hosts else []
+    modify_keystone_address(['root', remote_controller_hosts[0]], keystone_ip,
+                            rvip, remote_controller_hosts, remote_compute_hosts)
+    for host in controller_hosts:
+        host = ['root', host]
+        replace_all("/etc/cinder/cinder.conf",
+                    "backup_swift_auth_url *= *http://127.0.0.1:5000/v2.0/",
+                    "backup_swift_auth_url = http://%s:5000/v3/" % keystone_ip,
+                    host)
+        #restart_all_openstack_service(host)
 
 
 def modify_regions(region, hosts=None):
@@ -368,7 +380,7 @@ def modify_regions(region, hosts=None):
         #             "os_region_name = %s" % region, host)
         # replace_all("/etc/", "#cinder_os_region_name = <None>",
         #             "cinder_os_region_name = %s" % region, host)
-        restart_all_openstack_service(host)
+        #restart_all_openstack_service(host)
 
 
 def modify_all_regions(conf):
@@ -382,27 +394,34 @@ def modify_all_regions(conf):
 
 
 def modify_keystone_endpoint_url_to_v3(conf):
-    if conf.get("global", "change_keystone_endpoint_url_to_v3").strip():
+    v3 = conf.get("global", "change_keystone_endpoint_url_to_v3").strip()
+    if v3.lower() == "true":
+        regions = []
+    else:
+        regions = [x.strip() for x in v3.split(",")]
+    if v3:
         print "modify keystone endpoint url to v3..."
         endpoints = get_endpoint_list()
         for endpoint in endpoints:
             if endpoint[u"Service Name"] == u'keystone':
                 if endpoint[u"URL"].endswith("v2.0"):
-                    endpoint[u"URL"] = endpoint[u"URL"].replace("v2.0", "v3")
-                    cmd = "%s && openstack endpoint set %s --url \"%s\"" % \
-                          (KEYSTONE_RC_CMD, endpoint[u'ID'], endpoint[u'URL'])
-                    system(cmd)
+                    if not regions or endpoint[u'Region'] in regions:
+                        endpoint[u"URL"] = endpoint[u"URL"].replace("v2.0",
+                                                                    "v3")
+                        cmd = "%s && openstack endpoint set %s --url \"%s\"" % \
+                            (KEYSTONE_RC_CMD, endpoint[u'ID'], endpoint[u'URL'])
+                        system(cmd)
 
 
-def get_all_hosts(conf):
+def get_all_openstack_hosts(conf):
     """return all hosts in conf file. host is a IP list"""
     hosts = []
-    vip = conf.get('global', 'remote_controller_virtual_ip')
+    vip = conf.get('global', 'controller_virtual_ip').strip()
     controller_hosts = conf.get("global", "controller_hosts").strip()
     controller_hosts = [x.strip() for x in controller_hosts.split(",")] \
         if controller_hosts else [vip]
     hosts.extend(controller_hosts)
-    rvip = conf.get('global', 'remote_controller_virtual_ip')
+    rvip = conf.get('global', 'remote_controller_virtual_ip').strip()
     remote_controller_hosts = conf.get("global", "remote_controller_hosts"
                                        ).strip()
     remote_controller_hosts = [x.strip() for x in
@@ -421,6 +440,14 @@ def get_all_hosts(conf):
     return ret
 
 
+def get_all_hosts(conf):
+    hosts = get_all_openstack_hosts(conf)
+    mysql_ip = conf.get("global", "mysql").strip().split(":")
+    if mysql_ip:
+        hosts.append(mysql_ip[0])
+    return hosts
+
+
 def config_ssh_key(conf):
     password = conf.get('global', 'ssh_password')
     hosts = get_all_hosts(conf)
@@ -430,8 +457,8 @@ def config_ssh_key(conf):
 
 
 def reboot_system(conf):
+    hosts = get_all_openstack_hosts(conf)
     if conf.get("global", "reboot_system").strip():
-        hosts = get_all_hosts(conf)
         has_local = False
         for host in hosts:
             if is_local(host):
@@ -440,6 +467,9 @@ def reboot_system(conf):
             system(ssh_cmd("reboot &", ("root", host)))
         if has_local:
             system("sh -c 'echo your system will reboot now;sleep 5;reboot' &")
+    else:
+        for host in hosts:
+            restart_all_openstack_service(host)
 
 
 def main():
@@ -447,12 +477,16 @@ def main():
     config_ssh_key(conf)
     keystone_ip = conf.get("global", "keystone_ip").strip()
     remote_keystone_ip = conf.get("global", "remote_keystone_ip").strip()
-    remote_keystone_host = "root@" + remote_keystone_ip
-    regions = get_region_list(remote_keystone_host)
+    remote_controller_hosts = conf.get("global", "remote_controller_hosts"
+                                       ).strip()
+    remote_controller_host = remote_controller_hosts.split(",")[0]\
+        if remote_controller_hosts else remote_keystone_ip
+    remote_controller_host = ("root", remote_controller_host)
+    regions = get_region_list(remote_controller_host)
     add_regions(keystone_ip, regions)
-    services = get_service_list(remote_keystone_host)
+    services = get_service_list(remote_controller_host)
     add_services(keystone_ip, services)
-    endpoints = get_endpoint_list(remote_keystone_host)
+    endpoints = get_endpoint_list(remote_controller_host)
     add_endpoints(keystone_ip, endpoints, conf)
     modify_keystone_endpoint_url_to_v3(conf)
     modify_all_keystone_address(conf)
