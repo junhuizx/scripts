@@ -24,6 +24,7 @@ DRY_RUN = False
 IP_PATTERN = re.compile(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
 KEYSTONE_IP = "localhost"
 DASHBOARD_PATH = "/usr/share/openstack-dashboard"
+SOURCE_CMD = "source ~/keystonerc_admin"
 
 
 def get_default_ip():
@@ -82,23 +83,25 @@ def parse_opt():
     args = parser.parse_args()
     if args.config_file:
         conf.read(args.config_file)
-    global KEYSTONE_RC_CMD, DRY_RUN, KEYSTONE_IP, DASHBOARD_PATH
+    global KEYSTONE_RC_CMD, DRY_RUN, KEYSTONE_IP, DASHBOARD_PATH, SOURCE_CMD
     KEYSTONE_RC_CMD = conf.get("global", "openstack_admin_source_cmd")
     DRY_RUN = args.dry_run
     KEYSTONE_IP = conf.get("global", "keystone_ip")
     DASHBOARD_PATH = conf.get("global", "dashboard_path")
+    SOURCE_CMD = conf.get("global", "openstack_admin_source_cmd")
     if not conf.get("global", "keystone_ip").strip():
         conf.set("global", "keystone_ip", conf.get("global",
                                                    "controller_virtual_ip"))
     if not conf.get("global", "remote_keystone_ip").strip():
         conf.set("global", "remote_keystone_ip",
                  conf.get("global", "remote_controller_virtual_ip"))
+    conf.juno = conf.get("global", "juno").strip()
     return conf
 
 
 def get_list_gener(list_type, args=""):
     def get_(host=None):
-        cmd = "%s; openstack %s list -f json %s" % \
+        cmd = "%s; /tmp/openstack %s list -f json %s" % \
               (KEYSTONE_RC_CMD, list_type, args)
         cmd = ssh_cmd(cmd, host)
         print cmd
@@ -152,7 +155,7 @@ def add_wraper(add_type, name):
 
 @add_wraper("region", u'Region')
 def add_regions(region):
-    cmd = "%s && openstack region create %s %s %s" % \
+    cmd = "%s && /tmp/openstack region create %s %s %s" % \
           (KEYSTONE_RC_CMD, region[u'Region'],
            "--parent-region %s" % region[u'Parent Region']
            if region[u'Parent Region'] else "",
@@ -163,7 +166,7 @@ def add_regions(region):
 
 @add_wraper("service", u'Type')
 def add_services(service):
-    cmd = "%s && openstack service create %s %s %s %s" % \
+    cmd = "%s && /tmp/openstack service create %s %s %s %s" % \
           (KEYSTONE_RC_CMD, service[u'Type'],
            "--name %s" % service[u'Name'] if service[u'Name'] else "",
            "--description '%s'" % service[u'Description']
@@ -182,8 +185,11 @@ def add_endpoints(endpoint, conf):
     if '127.0.0.1' in endpoint[u'URL']:
         endpoint[u'URL'].replace('127.0.0.1', conf.get("global",
                                  'remote_controller_virtual_ip'))
-    cmd = "%s && openstack endpoint create %s %s \"%s\" %s %s" % \
-          (KEYSTONE_RC_CMD, endpoint[u'Service Type'],
+    if 'localhost' in endpoint[u'URL']:
+        endpoint[u'URL'].replace('localhost', conf.get("global",
+                                 'remote_controller_virtual_ip'))
+    cmd = "%s && /tmp/openstack endpoint create %s %s \"%s\" %s %s" % \
+          (KEYSTONE_RC_CMD, endpoint[u'Service Name'],
            endpoint[u'Interface'], endpoint[u'URL'],
            "--region %s" % endpoint[u'Region'],
            "--enable" if endpoint[u'Enabled'] else "--disable")
@@ -250,8 +256,13 @@ DATABASES = {
                 system('cat >> %s <<EOF \n%sEOF' % (settings_file, context))
             if first and not memcache:
                 print "migrate"
-                system(ssh_cmd("python %s/manage.py migrate" % dashboard_path,
-                               host))
+                ret = system(ssh_cmd("python %s/manage.py migrate" %
+                                     dashboard_path, host))
+                # because some version don't have migrate command, use syncdb
+                if ret != 0:
+                    print "syncdb"
+                    system(ssh_cmd("python %s/manage.py syncdb --noinput" %
+                                         dashboard_path, host))
                 first = False
             system(ssh_cmd("service httpd restart", host))
 
@@ -260,7 +271,7 @@ def replace_all(path, src, dst, host=None):
     src = src.replace("/", r"\/")
     dst = dst.replace("/", r"\/")
     cmd = "find %s -type f | xargs -n1 sed -i 's/%s/%s/g'" % (path, src, dst)
-    print "Before ssh_cmd:", cmd
+    # print "Before ssh_cmd:", cmd
     return system(ssh_cmd(cmd, host))
 
 
@@ -274,12 +285,12 @@ def add_config_if_have_not_added(path, pattern, not_add_pattern,
     context = reduce(lambda x, y: "%si \%s\n" % (x, y), config_lines, "")
     cmd = "find %s -type f | xargs -n1 sed -i  '/%s/{n;/%s/'\!'{%s}}'" %\
           (path, pattern, not_add_pattern, context)
-    print "Before ssh_cmd:", cmd
+    # print "Before ssh_cmd:", cmd
     return system(ssh_cmd(cmd, host))
 
 
 def modify_keystone_address(host, keystone_ip, vip=None, hosts=None,
-                            remote_compute_hosts=[]):
+                            remote_compute_hosts=[], keystone_api_version='v3'):
     print('modify keystone address: %s' % host)
     # get all endpoints in the other region
     endpoint_info = [(x[u"Service Name"], x[u'URL']) for x
@@ -300,27 +311,35 @@ def modify_keystone_address(host, keystone_ip, vip=None, hosts=None,
             ip_address_dict.setdefault(ip_address, set()).add(each[0])
 
     for ip, service_set in ip_address_dict.items():
-        if ip == "127.0.0.1" or remote_keystone_ip == keystone_ip:
-            continue
         print ip
         host = ("root", ip)
+        add_config_if_have_not_added("/etc/cinder/cinder.conf",
+                                     "#encryption_auth_url",
+                                     "encryption_auth_url",
+                                     ["encryption_auth_url = http://%s:5000/%s"
+                                      % (keystone_ip, keystone_api_version),
+                                      "# add by setup_regions.py"],
+                                     host)
+        replace_all("/etc/cinder/cinder.conf",
+                    "backup_swift_auth_url *= *http://127.0.0.1:5000/v2.0/",
+                    "backup_swift_auth_url = http://%s:5000/%s/" %
+                    (keystone_ip, keystone_api_version),
+                    host)
+        if ip == "127.0.0.1" or remote_keystone_ip == keystone_ip:
+            continue
+        # Just modify other region's keystone ip address
         replace_all("/etc/", remote_keystone_ip + ":5000",
                     keystone_ip + ":5000", host)
         replace_all("./keystonerc_admin", remote_keystone_ip + ":5000",
                     keystone_ip + ":5000", host)
         replace_all("/etc/", remote_keystone_ip + ":35357",
                     keystone_ip + ":35357", host)
-        add_config_if_have_not_added("/etc/cinder/cinder.conf",
-                                     "#encryption_auth_url",
-                                     "encryption_auth_url",
-                                     ["encryption_auth_url = http://%s:5000/v3"
-                                      % keystone_ip,
-                                      "# add by setup_regions.py"],
-                                     host)
-        replace_all("/etc/cinder/cinder.conf",
-                    "backup_swift_auth_url *= *http://127.0.0.1:5000/v2.0/",
-                    "backup_swift_auth_url = http://%s:5000/v3/" % keystone_ip,
-                    host)
+        # In juno, need change all auth_host
+        replace_all("/etc/", "auth_host *= *" + remote_keystone_ip,
+                    "auth_host=" + keystone_ip, host)
+        replace_all("/etc/glance/glance-cache.conf",
+                    "^auth_url *= *http://localhost",
+                    "auth_url=http://" + keystone_ip, host)
         #restart_all_openstack_service(host)
     for host in remote_compute_hosts:
         host = ("root", host)
@@ -328,6 +347,9 @@ def modify_keystone_address(host, keystone_ip, vip=None, hosts=None,
                     keystone_ip + ":5000", host)
         replace_all("/etc/", remote_keystone_ip + ":35357",
                     keystone_ip + ":35357", host)
+        # In juno, need change all auth_host
+        replace_all("/etc/", "auth_host *= *" + remote_keystone_ip,
+                    "auth_host=" + keystone_ip, host)
 
 
 def modify_all_keystone_address(conf):
@@ -336,7 +358,7 @@ def modify_all_keystone_address(conf):
     #remote_keystone_ip = conf.get("global", "remote_keystone_ip").strip()
     #remote_keystone_host = "root@" + remote_keystone_ip
     vip = conf.get('global', 'controller_virtual_ip')
-    controller_hosts = conf.get("global", "remote_controller_hosts").strip()
+    controller_hosts = conf.get("global", "controller_hosts").strip()
     controller_hosts = [x.strip() for x in controller_hosts.split(",")] \
         if controller_hosts else [vip]
     rvip = conf.get('global', 'remote_controller_virtual_ip')
@@ -348,23 +370,47 @@ def modify_all_keystone_address(conf):
     remote_compute_hosts = conf.get("global", "remote_compute_hosts").strip()
     remote_compute_hosts = remote_compute_hosts.split(",") if \
         remote_compute_hosts else []
+    keystone_api_version = conf.get("global", "keystone_api_version").strip()
     modify_keystone_address(['root', remote_controller_hosts[0]], keystone_ip,
-                            rvip, remote_controller_hosts, remote_compute_hosts)
+                            rvip, remote_controller_hosts, remote_compute_hosts,
+                            keystone_api_version)
     for host in controller_hosts:
         host = ['root', host]
+        add_config_if_have_not_added("/etc/cinder/cinder.conf",
+                                     "#encryption_auth_url",
+                                     "encryption_auth_url",
+                                     ["encryption_auth_url = http://%s:5000/%s"
+                                      % (keystone_ip, keystone_api_version),
+                                      "# add by setup_regions.py"],
+                                     host)
         replace_all("/etc/cinder/cinder.conf",
                     "backup_swift_auth_url *= *http://127.0.0.1:5000/v2.0/",
-                    "backup_swift_auth_url = http://%s:5000/v3/" % keystone_ip,
+                    "backup_swift_auth_url = http://%s:5000/%s/" %
+                    (keystone_ip, keystone_api_version),
                     host)
         #restart_all_openstack_service(host)
+
+
+def is_local_region(region):
+    cmd = "%s; echo $OS_REGION_NAME | grep -w '%s'" % (SOURCE_CMD, region)
+    return os.system(cmd) == 0
 
 
 def modify_regions(region, hosts=None):
     for ip in hosts:
         host = "root@%s" % ip if not is_local(ip) else None
-        add_config_if_have_not_added("/etc", "#os_region_name *= *<None>",
+        add_config_if_have_not_added("/etc", "# *os_region_name *= *<None>",
                                      "^ *os_region_name",
                                      ["os_region_name=%s" % region,
+                                      "#add by setup_regions.py"],
+                                     host)
+        # In juno, dashboard can't get network list wehn
+        # modify RegionOne's ml2_conf_arista.ini file
+        # if not is_local_region(region):
+        add_config_if_have_not_added("/etc/neutron/plugins/ml2",
+                                     "# *Example: *region_name *=",
+                                     "^ *region_name",
+                                     ["region_name=%s" % region,
                                       "#add by setup_regions.py"],
                                      host)
         # system(ssh_cmd("find /etc/ -type f | xargs -n1 sed -i  '"
@@ -380,7 +426,6 @@ def modify_regions(region, hosts=None):
         #             "os_region_name = %s" % region, host)
         # replace_all("/etc/", "#cinder_os_region_name = <None>",
         #             "cinder_os_region_name = %s" % region, host)
-        #restart_all_openstack_service(host)
 
 
 def modify_all_regions(conf):
@@ -408,7 +453,7 @@ def modify_keystone_endpoint_url_to_v3(conf):
                     if not regions or endpoint[u'Region'] in regions:
                         endpoint[u"URL"] = endpoint[u"URL"].replace("v2.0",
                                                                     "v3")
-                        cmd = "%s && openstack endpoint set %s --url \"%s\"" % \
+                        cmd = "%s && /tmp/openstack endpoint set %s --url \"%s\"" % \
                             (KEYSTONE_RC_CMD, endpoint[u'ID'], endpoint[u'URL'])
                         system(cmd)
 
@@ -442,9 +487,9 @@ def get_all_openstack_hosts(conf):
 
 def get_all_hosts(conf):
     hosts = get_all_openstack_hosts(conf)
-    mysql_ip = conf.get("global", "mysql").strip().split(":")
-    if mysql_ip:
-        hosts.append(mysql_ip[0])
+    mysql = conf.get("global", "mysql").strip()
+    if mysql:
+        hosts.append(mysql.split(":")[0])
     return hosts
 
 
@@ -453,7 +498,33 @@ def config_ssh_key(conf):
     hosts = get_all_hosts(conf)
     ssh_copy_cmd = os.path.join(os.path.dirname(sys.argv[0]), "ssh-copy.sh")
     for host in hosts:
-        system("%s %s %s" % (ssh_copy_cmd, host, password))
+        os.system("%s %s %s" % (ssh_copy_cmd, host, password))
+
+
+def setup_openstack(conf):
+    base_path = os.path.dirname(__file__)
+    hosts = get_all_hosts(conf)
+    print hosts
+    cmd = "ln -s /tmp/openstack.py /tmp/openstack" if conf.juno\
+          else "if which openstack; then ln -s `which openstack` " \
+               "/tmp/openstack; else " \
+               "ln -s /tmp/openstack.py /tmp/openstack; fi"
+    for host in hosts:
+        scp_cmd = "scp %s/openstack %s:/tmp/openstack.py" % (base_path, host)
+        print(scp_cmd)
+        os.system(scp_cmd)
+        ln_cmd = ssh_cmd(cmd, host)
+        print(ln_cmd)
+        os.system(ln_cmd)
+
+
+def teardown_openstack(conf):
+    hosts = get_all_hosts(conf)
+    cmd = "rm -f /tmp/openstack /tmp/openstack.py"
+    for host in hosts:
+        rm_cmd = ssh_cmd(cmd, host)
+        print (rm_cmd)
+        os.system(rm_cmd)
 
 
 def reboot_system(conf):
@@ -475,23 +546,27 @@ def reboot_system(conf):
 def main():
     conf = parse_opt()
     config_ssh_key(conf)
-    keystone_ip = conf.get("global", "keystone_ip").strip()
-    remote_keystone_ip = conf.get("global", "remote_keystone_ip").strip()
-    remote_controller_hosts = conf.get("global", "remote_controller_hosts"
-                                       ).strip()
-    remote_controller_host = remote_controller_hosts.split(",")[0]\
-        if remote_controller_hosts else remote_keystone_ip
-    remote_controller_host = ("root", remote_controller_host)
-    regions = get_region_list(remote_controller_host)
-    add_regions(keystone_ip, regions)
-    services = get_service_list(remote_controller_host)
-    add_services(keystone_ip, services)
-    endpoints = get_endpoint_list(remote_controller_host)
-    add_endpoints(keystone_ip, endpoints, conf)
-    modify_keystone_endpoint_url_to_v3(conf)
-    modify_all_keystone_address(conf)
-    modify_session_engine(conf)
-    modify_all_regions(conf)
+    setup_openstack(conf)
+    try:
+        keystone_ip = conf.get("global", "keystone_ip").strip()
+        remote_keystone_ip = conf.get("global", "remote_keystone_ip").strip()
+        remote_controller_hosts = conf.get("global", "remote_controller_hosts"
+                                           ).strip()
+        remote_controller_host = remote_controller_hosts.split(",")[0]\
+            if remote_controller_hosts else remote_keystone_ip
+        remote_controller_host = ("root", remote_controller_host)
+        regions = get_region_list(remote_controller_host)
+        add_regions(keystone_ip, regions)
+        services = get_service_list(remote_controller_host)
+        add_services(keystone_ip, services)
+        endpoints = get_endpoint_list(remote_controller_host)
+        add_endpoints(keystone_ip, endpoints, conf)
+        modify_keystone_endpoint_url_to_v3(conf)
+        modify_all_keystone_address(conf)
+        modify_session_engine(conf)
+        modify_all_regions(conf)
+    finally:
+        teardown_openstack(conf)
     reboot_system(conf)
     return 0
 

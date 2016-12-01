@@ -17,4 +17,10 @@ sed -i '/s.innerHTML *= *msg;/{n;/^ *if(/'\!'{i \                if\(msg.indexOf
 i \                    s.innerHTML = "";
 i \                \}
 }}' /usr/share/novnc/vnc_auto.html
-systemctl restart httpd openstack-nova-novncproxy
+systemctl restart openstack-nova-novncproxy
+
+source keystonerc_admin
+for host in `openstack hypervisor list | awk -F\| '{if($2~"[0-9]+")print $3}'`; do
+openstack hypervisor show $host -c host_ip | grep host_ip | awk '{print $4}'
+ssh $host "sed -i  's/^novncproxy_base_url *= *http:/novncproxy_base_url=https:/g' /etc/nova/nova.conf; systemctl restart openstack-nova-compute"
+done
