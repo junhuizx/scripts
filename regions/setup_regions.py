@@ -458,6 +458,27 @@ def modify_keystone_endpoint_url_to_v3(conf):
                         system(cmd)
 
 
+def modify_vif_plugging_is_fatal(conf):
+    """In juno, if didn't chang this setting, It can't create an instance successfully."""
+    juno = conf.get('global', 'juno').strip()
+    if juno:
+        rvip = conf.get('global', 'remote_controller_virtual_ip')
+        remote_controller_hosts = conf.get("global", "remote_controller_hosts"
+                                           ).strip()
+        remote_controller_hosts = [x.strip() for x in
+                                   remote_controller_hosts.split(",")] \
+            if remote_controller_hosts else [rvip]
+        remote_compute_hosts = conf.get("global", "remote_compute_hosts").strip()
+        remote_compute_hosts = remote_compute_hosts.split(",") if \
+            remote_compute_hosts else []
+        hosts = remote_controller_hosts + remote_compute_hosts
+        for host in hosts:
+            replace_all("/etc/nova/nova.conf", "^vif_plugging_is_fatal.*", "vif_plugging_is_fatal=False",
+                        host)
+            replace_all("/etc/nova/nova.conf", "^vif_plugging_timeout.*", "vif_plugging_timeout=0",
+                        host)
+
+
 def get_all_openstack_hosts(conf):
     """return all hosts in conf file. host is a IP list"""
     hosts = []
@@ -565,6 +586,7 @@ def main():
         modify_all_keystone_address(conf)
         modify_session_engine(conf)
         modify_all_regions(conf)
+        modify_vif_plugging_is_fatal(conf)
     finally:
         teardown_openstack(conf)
     reboot_system(conf)
