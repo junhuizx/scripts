@@ -3,8 +3,8 @@ set -x
 
 mkdir ssl
 openssl genrsa -out ssl/server.key 2048
-openssl req -new -key ssl/server.key -out ssl/server.csr
-openssl req -x509 -days 365 -key ssl/server.key -in ssl/server.csr -out ssl/server.crt
+openssl req -new -key ssl/server.key -out ssl/server.csr  -subj /C=CN/ST=newtouch/L=newtouch/O=ntx/CN=newtouch.com
+openssl req -x509 -days 3650 -key ssl/server.key -in ssl/server.csr -out ssl/server.crt
 cp -r ssl /etc/nova/
 sed -i  '/#ssl_only *= *false/{n;/^ *ssl_only/'\!'{i \ssl_only=true
 }}' /etc/nova/nova.conf
