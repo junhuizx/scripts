@@ -13,6 +13,8 @@ import os
 import re
 import json
 import argparse
+import sqlalchemy
+from prettytable import PrettyTable
 
 ARGS = None
 
@@ -46,6 +48,33 @@ def command(cmd):
     return _command
 
 
+def singleton(cls, *args, **kw):
+    instances = {}
+
+    def _singleton():
+        if cls not in instances:
+            instances[cls] = cls(*args, **kw)
+        return instances[cls]
+    return _singleton
+
+
+@singleton
+class DB_session(object):
+    def __init__(self, connection_str=None):
+        self.connection = connection_str if connection_str is not None else \
+                     os.popen("grep ^connection= /etc/keystone/keystone.conf | "
+                              "awk -F = '{print $2}'").read()
+        self.engine = sqlalchemy.create_engine(self.connection)
+        from sqlalchemy.orm import sessionmaker
+        self.session = sessionmaker(bind=self.engine)()
+
+    def __getattr__(self, item):
+        return getattr(self.session, item)
+
+    def __del__(self):
+        self.session.close()
+
+
 def get_keystone_sql():
     connection = os.popen("grep ^connection= /etc/keystone/keystone.conf | "
                           "awk -F = '{print $2}'").read()
@@ -63,22 +92,40 @@ def get_sql_cmd(sql):
     return cmd
 
 
+def pretty_table(rows):
+    table = PrettyTable(rows[0])
+    for row in rows[1:]:
+        table.add_row(row)
+    return table.get_string()
+
+
 def get_region():
-    cmd = get_sql_cmd(get_keystone_sql())
-    cmd = "%s -e 'select id as Region, parent_region_id as \"Parent Region\", description from region'" % cmd
-    return os.popen(cmd).read()
+    session = DB_session()
+    ret = session.execute('select id, parent_region_id, '
+                          'description from region')
+    rows = [("Region", "Parent Region", "description")]
+    rows.extend(ret.fetchall())
+    return pretty_table(rows)
+    # cmd = get_sql_cmd(get_keystone_sql())
+    # cmd = "%s -e 'select id as Region, parent_region_id as \"Parent Region\", description from region'" % cmd
+    # return os.popen(cmd).read()
 
 
 def add_region():
     region = ARGS.args[0]
-    parent_region = ARGS.parent_region if ARGS.parent_region else "NULL"
+    parent_region = '"%s"' % ARGS.parent_region if ARGS.parent_region\
+                    else "NULL"
     description = ARGS.description
-    cmd = get_sql_cmd(get_keystone_sql())
-    cmd = '''%s -e 'INSERT INTO region (id, parent_region_id, extra, description) VALUES ("%s","%s","%s","%s")' ''' % (cmd, region, parent_region, "{}", description)
-    if os.system(cmd) == 0:
-        return "add Region %s successful" % region
-    else:
-        raise FailException("add Region %s fail" % region)
+    session = DB_session()
+    session.execute('''INSERT INTO region (id, parent_region_id, extra, description) VALUES ("%s",%s,"%s","%s") ''' % (region, parent_region, "{}", description))
+    session.commit()
+    return "add Region %s successful" % region
+    # cmd = get_sql_cmd(get_keystone_sql())
+    # cmd = '''%s -e 'INSERT INTO region (id, parent_region_id, extra, description) VALUES ("%s","%s","%s","%s")' ''' % (cmd, region, parent_region, "{}", description)
+    # if os.system(cmd) == 0:
+    #     return "add Region %s successful" % region
+    # else:
+    #     raise FailException("add Region %s fail" % region)
 
 
 def add_service():
