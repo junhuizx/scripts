@@ -18,8 +18,8 @@ for host in `openstack compute service list --service  nova-consoleauth | awk -F
 	}}'\'' /etc/nova/nova.conf'
 	$sshcmd_host 'sed -i  '\''/#key=<None>/{n;/^ *key/'\!'{i \key=/etc/nova/ssl/server.key
 	}}'\'' /etc/nova/nova.conf'
-	$sshcmd_host 'sed -i  '\''s/^novncproxy_base_url *= *http:/novncproxy_base_url=https:/g'\'' /etc/nova/nova.conf
-	$sshcmd_host 'sed -i '\''/s.innerHTML *= *msg;/{n;/^ *if(/'\!'{i \                if\(msg.indexOf\("Connected"\) == 0\)\{
+	$sshcmd_host 'sed -i  '\''s/^novncproxy_base_url *= *http:/novncproxy_base_url=https:/g'\'' /etc/nova/nova.conf'
+	$sshcmd_host 'sed -i  '\''/s.innerHTML *= *msg;/{n;/^ *if(/'\!'{i \                if\(msg.indexOf\("Connected"\) == 0\)\{
 	i \                    s.innerHTML = "";
 	i \                \}
 	}}'\'' /usr/share/novnc/vnc_auto.html'
@@ -30,5 +30,5 @@ done
 
 for host in `openstack hypervisor list | awk -F\| '{if($2~"[0-9]+")print $3}'`; do
 openstack hypervisor show $host -c host_ip | grep host_ip | awk '{print $4}'
-ssh $host "sed -i  's/^novncproxy_base_url *= *http:/novncproxy_base_url=https:/g' /etc/nova/nova.conf; systemctl restart openstack-nova-compute"
+$sshcmd $host "sed -i  's/^novncproxy_base_url *= *http:/novncproxy_base_url=https:/g' /etc/nova/nova.conf; systemctl restart openstack-nova-compute"
 done
