@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>VNC</title>
+    <style>
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    #frm {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+    }
+    </style>
+    <script type="text/javascript" src="//apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script type="text/javascript" src="//apps.bdimg.com/libs/js-cookie/2.04/js.cookie.min.js"></script>
+    <script type="text/javascript" src="//apps.bdimg.com/libs/js-url/1.8.4/url.min.js"></script>
+</head>
+
+<body>
+    <iframe id="frm" frameborder="0"></iframe>
+    <script>
+    function removeUrlQuery(name, href) {
+
+        var s = href ? href : window.location.href;
+
+        var rs = new RegExp('(&|\\?)?' + name + '=?[^&#]*(.)?', 'g').exec(s);
+
+        if (rs) {
+            // case3: ?name2=value2&name=value => ?name2=value2
+            // case4: ?name2=value2&name=value&name3=value3 => ?name2=value2&name3=value3
+            if (rs[1] == '&') {
+                return s.replace(new RegExp('&' + name + '=?[^&#]+', 'g'), '');
+            } else if (rs[1] == '?') {
+                if (rs[2] != '&') { // case1: ?name=value => 
+                    return s.replace(new RegExp('\\?' + name + '=?[^&#]*', 'g'), '');
+                }
+
+                return s.replace(new RegExp('' + name + '=?[^&#]*&', 'g'), '');
+            }
+        }
+
+        return s;
+    }
+
+    // http://127.0.0.1:8887/?token=6028e3ba-8a1d-43c4-ab9a-e27ef1b2a548&host=host1
+    jQuery(document).ready(function($) {
+
+        var host = url('?host');
+        var token = url('?token');
+        if (host) {
+            if (!token) {
+                token = Cookies.get('token-' + host);
+            } else {
+                history.replaceState(null, '', removeUrlQuery('token'));
+                Cookies.set('token-' + host, token, {
+                    expires: 1 / 24
+                });
+            }
+        } else {
+            alert('主机标识参数不存在!');
+            return;
+        }
+
+        if (token) {
+            var src = '//' + url('hostname') + '/vnc_auto.html?token=' + token;
+            // $('#frm').attr('src', src);
+            $('#frm').attr('src', '/vnc_auto.html?token=' + token).focus();
+        } else {
+            alert('认证token参数不存在!');
+            return;
+        }
+    });
+    </script>
+</body>
+
+</html>
+
