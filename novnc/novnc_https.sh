@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -x
 
-mkdir ssl
-openssl genrsa -out ssl/server.key 2048
-openssl req -new -key ssl/server.key -out ssl/server.csr  -subj /C=CN/ST=newtouch/L=newtouch/O=ntx/CN=newtouch.com
-openssl req -x509 -days 3650 -key ssl/server.key -in ssl/server.csr -out ssl/server.crt
+#mkdir ssl
+#openssl genrsa -out ssl/server.key 2048
+#openssl req -new -key ssl/server.key -out ssl/server.csr  -subj /C=CN/ST=newtouch/L=newtouch/O=ntx/CN=newtouch.com
+#openssl req -x509 -days 3650 -key ssl/server.key -in ssl/server.csr -out ssl/server.crt
 
 sshcmd="ssh -o StrictHostKeyChecking=no"
 scpcmd="scp -o StrictHostKeyChecking=no"
