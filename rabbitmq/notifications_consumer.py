@@ -4,7 +4,7 @@ import sys
 
 def callback(ch, method, properties, body):
     #print (ch, method, properties, body)
-    print(" [x] Received %r" % body)
+    #print(" [x] Received %r" % body)
     #print "----"
     ch.basic_ack(delivery_tag = method.delivery_tag)
 
