@@ -4,7 +4,7 @@
 # to install this
 mkdir rabbitmq_consumer
 cd rabbitmq_consumer
-yum install -y wget python-pip
+yum -y install  wget python-pip
 pip install pika
 wget https://github.com/junhuizx/scripts/archive/master.zip
 unzip master.zip
