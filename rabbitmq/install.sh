@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# use curl https://raw.githubusercontent.com/junhuizx/scripts/master/rabbitmq/install.sh | bash
+# to install this
 mkdir rabbitmq_consumer
 cd rabbitmq_consumer
 yum install -y wget
