@@ -1,5 +1,8 @@
 #!/bin/bash
-
+set -x
+if [[ $# < 3 ]]; then
+    echo usage: $0 [server ip] [mongodb ip]
+fi
 server_ip=$1
 mongo_ip=$2
 source keystonerc_admin
