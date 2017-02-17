@@ -9,7 +9,9 @@ source keystonerc_admin
 mkdir vmagent; cd vmagent
 curl https://git.newtouch.com/user6358/instance_monitor_agent/repository/archive.zip -o agent.zip
 for host in `nova service-list --binary nova-compute  | awk -F\| '{if($2~"[0-9]+")print $4}'`; do
+    echo ===================
     echo $host
+    echo ===================
     openstack hypervisor show $host -c host_ip | grep host_ip | awk '{print $4}'
     ssh $host "rm -rf instance_monitor_agent.git agent.zip"
     scp agent.zip $host:~/
