@@ -18,9 +18,11 @@ for host in `nova service-list --binary nova-compute  | awk -F\| '{if($2~"[0-9]+
     scp /etc/yum.repos.d/CentOS* $host:/etc/yum.repos.d/
     ssh $host "if ! grep '^nameserver' /etc/resolv.conf ;then echo 'nameserver 114.114.114.114' >> /etc/resolv.conf ; systemctl restart network; fi"
     ssh $host "yum clean all"
-    ssh $host "yum install -y epel-release"
-    ssh $host "yum install -y python-pip"
-    ssh $host "pip install pymongo"
+    #ssh $host "yum install -y epel-release"
+    ssh $host "yum install -y python-pymongo"
+    #ssh $host "yum install -y epel-release"
+    #ssh $host "yum install -y python-pip"
+    #ssh $host "pip install pymongo"
     ssh $host "unzip agent.zip; cd instance_monitor_agent.git; python setup.py install"
     ssh $host 'sed -i '\'"s/^server_host.*/server_host = \"${server_ip}\"/g"\'' /etc/VMAgent/VMAgent.conf'
     ssh $host 'sed -i '\'"s/^mongodb_host.*/server_host = \"${mongo_ip}\"/g"\'' /etc/VMAgent/VMAgent.conf'
