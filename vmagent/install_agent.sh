@@ -1,7 +1,8 @@
 #!/bin/bash
 set -x
-if [[ $# < 3 ]]; then
+if [[ $# < 2 ]]; then
     echo usage: $0 [server ip] [mongodb ip]
+    exit 1
 fi
 server_ip=$1
 mongo_ip=$2
@@ -37,6 +38,7 @@ for host in `nova service-list --binary nova-compute  | awk -F\| '{if($2~"[0-9]+
     try ssh $host "pip install pymongo"
     ssh $host "unzip agent.zip"
     try ssh $host "cd instance_monitor_agent.git; python setup.py install"
+    #ssh $host '\cp -f instance_monitor_agent.git/etc/VMAgent.conf /etc/VMAgent/VMAgent.conf'
     ssh $host 'sed -i '\'"s/^server_host.*/server_host = \"${server_ip}\"/g"\'' /etc/VMAgent/VMAgent.conf'
     ssh $host 'sed -i '\'"s/^mongodb_host.*/mongodb_host = \"${mongo_ip}\"/g"\'' /etc/VMAgent/VMAgent.conf'
     ssh $host "VMAgent-stop"
