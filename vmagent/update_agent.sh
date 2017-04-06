@@ -1,9 +1,5 @@
 #!/bin/bash
 set -x
-if [[ $# < 2 ]]; then
-    echo usage: $0 [server ip] [mongodb ip]
-    exit 1
-fi
 server_ip=$1
 mongo_ip=$2
 touch result.log
