@@ -1,4 +1,5 @@
 #!/bin/bash
+alias ssh='ssh -o StrictHostKeyChecking=no'
 server_ip=$1
 mongo_ip=$2
 touch result.log
