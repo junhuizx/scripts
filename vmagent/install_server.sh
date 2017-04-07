@@ -33,7 +33,7 @@ systemctl start mongod
 
 systemctl start mariadb
 
-mysql -uroot -e "CREATE DATABASE vmserver DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;GRANT ALL privileges ON vmserver.* TO vmserver@'%' IDENTIFIED BY 'vmserver';"
+mysql -uroot -e "CREATE DATABASE vmserver DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci; GRANT ALL privileges ON vmserver.* TO 'vmserver'@'%' IDENTIFIED BY 'vmserver';"
 
 git clone https://git.newtouch.com/user6358/instance_monitor_server.git
 mv instance_monitor_server/ /var/www/
