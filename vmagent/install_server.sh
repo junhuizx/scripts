@@ -46,7 +46,7 @@ sed -i 's/^MONGODB_HOST.*/MONGODB_HOST='\'${server_ip}\''/g' /var/www/instance_m
 pwd
 ls
 cp vmserver.conf /etc/nginx/conf.d/vmserver.conf
-sed -i 's/80 default_server/8000 default_server/g' /etc/nginx/nginx.conf
+sed -i 's/80 default_server/8888 default_server/g' /etc/nginx/nginx.conf
 cp supervisor-app.ini  /etc/supervisord.d/supervisor-app.ini
 python manage.py migrate
 python manage.py createsuperuser --username admin --email admin@localhost
