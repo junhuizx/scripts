@@ -6,7 +6,7 @@ if [[ $# < 2 ]]; then
     exit 1
 fi
 server_ip=$1
-auth_url=`echo http://172.23.64.45:8083/api/user/checkToken?token= | sed 's$172.23.64.45:8083$'$2'$g'`
+auth_url=`echo https://172.23.64.45:8083/api/user/checkToken?token= | sed 's$172.23.64.45:8083$'$2'$g'`
 
 yum install -y epel-release
 yum install -y git vim
