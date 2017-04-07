@@ -30,6 +30,7 @@ for host in `nova service-list --binary nova-compute  | awk -F\| '{if($2~"[0-9]+
     openstack hypervisor show $host -c host_ip | grep host_ip | awk '{print $4}'
     ssh $host "rm -rf instance_monitor_agent.git agent.zip"
     scp agent.zip $host:~/
+    ssh $host "mkdir -p /etc/yum.repos.d/bak; mv /etc/yum.repos.d/rdo*.repo /etc/yum.repos.d/bak/"
     scp /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-CR.repo /etc/yum.repos.d/CentOS-Debuginfo.repo /etc/yum.repos.d/CentOS-fasttrack.repo /etc/yum.repos.d/CentOS-Sources.repo /etc/yum.repos.d/CentOS-Vault.repo $host:/etc/yum.repos.d/
     ssh $host "if ! grep '^nameserver' /etc/resolv.conf ;then echo 'nameserver 114.114.114.114' >> /etc/resolv.conf ; systemctl restart network; fi"
     ssh $host "yum clean all"
