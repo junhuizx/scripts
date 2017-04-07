@@ -1,6 +1,7 @@
 #!/bin/bash
 set -x
 alias ssh='ssh -o StrictHostKeyChecking=no'
+alias scp='scp -o StrictHostKeyChecking=no'
 if [[ $# < 2 ]]; then
     echo usage: $0 [server ip] [mongodb ip]
     exit 1
