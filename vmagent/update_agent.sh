@@ -14,7 +14,8 @@ function try()
         echo $i failed
     done
 }
-source keystonerc_admin
+source ~/keystonerc_admin
+rm -rf vmagent
 mkdir vmagent; cd vmagent
 curl https://git.newtouch.com/user6358/instance_monitor_agent/repository/archive.zip -o agent.zip
 for host in `nova service-list --binary nova-compute  | awk -F\| '{if($2~"[0-9]+")print $4}'`; do
