@@ -1,0 +1,2 @@
+#!/bin/bash
+curl -s -request POST  --url http://sso.newtouch.com/api/oauth/token  --header 'cache-control: no-cache'  --header 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW'  --form grant_type=password  --form client_id=481c89100ea34c22ba1701fed70dd204  --form client_secret=step.newtouch.com  --form username=zjh63977197  --form password=a6643894 | python -m json.tool | grep -w access_token | awk -F\" '{print $4}'
