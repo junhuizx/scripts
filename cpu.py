@@ -3,6 +3,7 @@
 import time
 import sys
 import multiprocessing as mp
+import argparse
 
 def cpu(percent):
     r = (100-percent)*0.9/percent
@@ -15,7 +16,11 @@ def cpu(percent):
         time.sleep(t * r)
 
 def main():
+    #parser = argparse.ArgumentParser()
+    #parser.add_argument('-p', '--percent', help='used percent')
+    cpu_count = mp.cpu_count()
     percent = int(sys.argv[1]) if len(sys.argv)>=2 else 100
+    percent = percent * cpu_count
     num = percent/100
     percent = percent%100
     percent = 1 if percent==0 else percent
