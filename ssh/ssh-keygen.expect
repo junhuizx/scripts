@@ -1,0 +1,12 @@
+#!/usr/bin/expect
+spawn ssh-keygen
+expect {
+"id_rsa):" { send "\r"; exp_continue }
+"(empty for no passphrase):" { send "\r"; exp_continue }
+"again:" { send "\r"; exp_continue }
+"Overwrite" { send "n\r"; exp_continue }
+eof { exit }
+}
+
+expect eof
+exit
