@@ -31,7 +31,7 @@ function find_host()
 
 $base/ssh-keygen.expect
 for host in `find_host`; do
-    $base/ssh-copy-id.expect $password
+    $base/ssh-copy-id.expect "$host" "$password"
 done
 
 
