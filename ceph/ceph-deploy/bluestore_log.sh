@@ -20,4 +20,6 @@ for node in $hosts; do
     ceph-deploy osd create --bluestore --data /dev/sdd --block-wal /dev/sde $node --debug
 done
 ceph osd pool create testbench 128 128
+ceph osd pool application enable testbench rbd
 ceph osd pool create rbd 256 256
+ceph osd pool application enable rbd rbd
