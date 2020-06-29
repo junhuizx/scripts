@@ -1,0 +1,11 @@
+#!/bin/bash
+set -x
+scripts=$1
+shift
+sc_name=`basename $scripts`
+./all_scp $scripts /tmp/$sc_name
+
+./all_sh /tmp/$sc_name $*
+
+
+

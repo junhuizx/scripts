@@ -1,0 +1,7 @@
+#!/bin/bash
+hosts=`cat hosts`
+ceph-deploy purge $hosts
+ceph-deploy purgedata $hosts 
+ceph-deploy uninstall $hosts
+ceph-deploy forgetkeys
+

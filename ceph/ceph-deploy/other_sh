@@ -1,0 +1,7 @@
+#!/bin/bash
+for i in `seq 2 3`;do
+    ssh ceph_ec_test_mon_$i $*
+done
+for i in `seq 4 6`;do
+    ssh ceph_ec_test_osd_$i $*
+done 

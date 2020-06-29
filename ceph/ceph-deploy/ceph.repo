@@ -1,0 +1,20 @@
+[ceph-noarch]
+name=Ceph noarch packages
+baseurl=http://mirrors.aliyun.com/ceph/rpm-nautilus/el7/noarch
+enabled=1
+gpgcheck=0
+exclude=*14.2.3* *14.2.4* *14.2.5* *14.2.6* *14.2.7* *14.2.8* *14.2.9*
+
+[ceph]
+name=Ceph packages for x86_64
+baseurl=http://mirrors.aliyun.com/ceph/rpm-nautilus/el7/x86_64/
+enabled=1
+gpgcheck=0
+exclude=*14.2.3* *14.2.4* *14.2.5* *14.2.6* *14.2.7* *14.2.8* *14.2.2*
+
+
+[ceph-source]
+name=Ceph source packages
+baseurl=http://mirrors.aliyun.com/ceph/rpm-nautilus/el7/SRPMS/
+enabled=1
+gpgcheck=0

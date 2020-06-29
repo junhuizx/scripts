@@ -1,0 +1,4 @@
+#!/bin/bash
+for node in `cat hosts`; do
+    scp $1 $node:$2
+done

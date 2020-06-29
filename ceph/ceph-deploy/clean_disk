@@ -1,0 +1,6 @@
+#!/bin/bash
+for lv in `lvs |grep ceph| awk '{print $2}'`;do  lvremove -f $lv ;done
+for vg in `vgs |grep ceph| awk '{print $1}'`;do  vgremove -f $vg ;done
+pvremove /dev/sdc
+pvremove /dev/sdd
+pvremove /dev/sde

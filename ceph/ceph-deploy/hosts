@@ -1,0 +1,6 @@
+ceph_ec_test_mon_1
+ceph_ec_test_mon_2
+ceph_ec_test_mon_3
+ceph_ec_test_osd_4
+ceph_ec_test_osd_5
+ceph_ec_test_osd_6
