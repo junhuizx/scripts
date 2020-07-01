@@ -1,7 +1,4 @@
 #!/bin/bash
-for i in `seq 1 3`;do
-    ssh ceph_ec_test_mon_$i $*
+for node in `cat hosts`; do
+    ssh $node $*
 done
-for i in `seq 4 6`;do
-    ssh ceph_ec_test_osd_$i $*
-done 
