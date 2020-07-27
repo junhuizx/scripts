@@ -1,6 +1,6 @@
 #!/bin/bash
 #set -x
-if [[ $1 -eq  "-h" ]];then
+if [[ z$1 ==  a"-h" ]];then
   echo usage: $0 disk partnum partsize [create remain size]
   exit 1
 fi
