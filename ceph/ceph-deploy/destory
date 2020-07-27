@@ -1,7 +1,10 @@
 #!/bin/bash
-hosts=`cat hosts`
+BASEDIR=`dirname $BASH_SOURCE`
+. $BASEDIR/ceph_def.sh
+
 ceph-deploy purge $hosts
 ceph-deploy purgedata $hosts 
 ceph-deploy uninstall $hosts
 ceph-deploy forgetkeys
-
+rm $BASEDIR/ceph.*
+$BASEDIR/all_sh 'yum remove libradosstriper1 python-rgw python-ceph-argparse librgw2  python-cephfs libcephfs1 libcephfs2  librados2 python-rados librados2 librbd1 python-rbd -y'
