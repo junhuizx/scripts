@@ -1,0 +1,9 @@
+declare -A cephs
+cephs=( [dev]='10.3.12.66' )
+dev_hosts="10.3.12.66 10.3.12.67 10.3.12.68"
+
+targetusers="yovole"
+
+keyname=readonly
+keyring=ceph.client.$keyname.keyring
+caps='mon "allow r" mgr "allow r" osd "allow r"'
