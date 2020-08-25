@@ -43,7 +43,7 @@ for ceph in ${!cephs[@]};do
     if ! ssh root@$host ls /etc/ceph/$keyring > /dev/null 2>/dev/null ; then
       scp $BASEDIR/$keyring.$ceph root@$host:/etc/ceph/$keyring
       ssh root@$host chmod 600 /etc/ceph/$keyring
-      ssh root@$host chown $targetuser:$targetuser /etc/ceph/$keyring
+      ssh root@$host setfacl -m u:$targetuser:r /etc/ceph/$keyring
       ssh root@$host cp /home/$targetuser/.bashrc /home/$targetuser/.bashrc.bak
       ssh root@$host 'grep readonly /home/'$targetuser'/.bashrc >/dev/null || echo '\''alias ceph="ceph -n client.readonly"'\'' >> /home/'$targetuser'/.bashrc'
     fi
