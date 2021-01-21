@@ -36,7 +36,7 @@ class Bar(object):
             sys.stdout.write(self.out.format(**self.__dict__))
             sys.stdout.flush()
             if self.index == self.max:
-                print ""
+                print("")
                 #print "complete!"
             self.index += self.step
             yield percent
@@ -66,24 +66,51 @@ def bar(taskname, max=100, fill_char='#', processing_char='>', barlen=50):
         sys.stdout.write(out.format(**locals()))
         sys.stdout.flush()
         if index >= max:
-            print ""
+            print("")
             # print "complete!"
         step = yield percent
         step = 1 if step is None else step
         index += step
 
+def processing(taskname):
+    count_len = len("%s" % max)
+    out = '\r{taskname}: {index}'
+    percent = 0.0
+    index = 0
+    step = 1
+    sys.stdout.write(out.format(**locals()))
+    sys.stdout.flush()
+    while True:
+        sys.stdout.write(out.format(**locals()))
+        sys.stdout.flush()
+        step = yield index
+        step = 1 if step is None else step
+        index += step
 
 def test_bar():
     max=100
-    b=bar("test_bar", max)
+    for i in bar("test_bar", max):
+        time.sleep(0.1)
+    b=bar("test_bar2", max)
     b.send(None)
     step = 3
-    for i in range(max/step):
-        time.sleep(0.01)
+    for i in range(int(max/step)+1):
+        time.sleep(0.1)
         b.send(step)
         #b.next()
     b.close()
 
 
+def test_processing():
+    max = 100
+    b = processing("test_processing")
+    b.send(None)
+    step = 2
+    for i in range(int(max / step)):
+        time.sleep(0.1)
+        b.send(step)
+    b.close()
+    print("\ndone")
+
 if __name__ == "__main__":
-    test_bar()
+    test_processing()
